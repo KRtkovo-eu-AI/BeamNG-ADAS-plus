@@ -1,9 +1,9 @@
 # Advanced Driver Assistance Systems Plus (ADAS+) for BeamNG
 
-**Version:** 2.00 
+**Version:** 2.01 
 **Author:** KRtekTM, angelo234  
 **First Release:** March 31, 2021  
-**Last Update:** September 22, 2025  
+**Last Update:** September 25, 2025  
 
 ---
 
@@ -11,11 +11,15 @@
 
 This mod adds advanced driver assistance systems (ADAS) commonly found in modern vehicles. It allows these systems to be installed on *any* vehicle in BeamNG (vanilla or modded).  It is an extended version of [ADAS mod from Angelo234](https://www.beamng.com/resources/advanced-driver-assistance-systems.17384/), so it is recommended to have only one of the modes installed and allowed simultaneously.
 
+### Mod Preview
+https://www.youtube.com/watch?v=Vsb7ibeJJgk
+
 ---
 
 ## Features
 
-The current functionality includes:
+The current functionality includes:  
+_(warning: LiDAR, Lane Centering Assist, Obstacle Collision Assist and Autopilot are still in experimental phase)_
 
 - **Forward Automatic Emergency Braking (AEB)**  
   Applies full braking when a potential collision with another vehicle is detected. First alerts with an audible tone. Relies on road markings (AI paths) to check if the oncoming vehicle is in your path.
@@ -191,7 +195,7 @@ Autopilot piggybacks on BeamNG’s navigation AI: once the hardware slot is inst
 
 - **angelo234's ADAS mod v1.35** — April 8, 2025 (the base code)  
 - Earlier versions include fixes, optimizations and updates to adapt to BeamNG updates.  
-- **KRtekTM's ADAS+ mode v2.00** - September 22, 2025 (latest)
+- **KRtekTM's ADAS+ mode v2.01** - September 25, 2025 (latest)
 - Introduced Self-driving system: LiDAR, Obstacle Collision System, Lane Centering Assist, Autopilot
 
 ---
