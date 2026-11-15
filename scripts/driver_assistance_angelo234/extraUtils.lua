@@ -468,11 +468,7 @@ local function getFuturePositionXYWithAcc(veh_props, time, acc_vec, rel_car_pos)
   return veh_pos_future
 end
 
-local function getWaypointPosition(wp)
-  if not wp then return nil end
-  if not graph_positions then
-    refreshGraphData()
-  end
+local function lookupWaypointPosition(wp)
   if graph_positions and graph_positions[wp] then
     return vec3(graph_positions[wp])
   end
@@ -480,6 +476,30 @@ local function getWaypointPosition(wp)
     return vec3(map_nodes[wp].pos)
   end
   return nil
+end
+
+-- Maps that build their road graph while driving (e.g. BeamNG.Earth) replace map.getMap() and the vehicle map data:
+-- the tables cached at mission start go stale, and findClosestRoad returns nodes they do not have. On a miss the
+-- caches are taken again (at most every GRAPH_REFRESH_S of CPU time) before giving up.
+local last_graph_refresh = -1
+local GRAPH_REFRESH_S = 0.2
+
+local function getWaypointPosition(wp)
+  if not wp then return nil end
+  if not graph_positions then
+    refreshGraphData()
+  end
+  local pos = lookupWaypointPosition(wp)
+  if pos then return pos end
+  local now = os.clock()
+  if now - last_graph_refresh > GRAPH_REFRESH_S then
+    last_graph_refresh = now
+    map_nodes = map.getMap().nodes
+    findClosestRoad = map.findClosestRoad
+    refreshGraphData()
+    pos = lookupWaypointPosition(wp)
+  end
+  return pos
 end
 
 local function flipLaneString(lanes)
@@ -740,6 +760,10 @@ local function getWaypointStartEnd(my_veh_props, veh_props, position)
 
   local wp1_pos = getWaypointPosition(wp1)
   local wp2_pos = getWaypointPosition(wp2)
+
+  if not wp1_pos or not wp2_pos then
+    return nil      -- (nodes the graph does not have (any more): no road segment this frame)
+  end
 
   --Relative to my car
   local origin = my_veh_props.dir * -9999
