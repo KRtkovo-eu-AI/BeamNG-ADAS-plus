@@ -370,7 +370,12 @@ local function getPathLen(path, startIdx, stopIdx)
   stopIdx = stopIdx or #path
   local pathLen = 0
   for i = startIdx+1, stopIdx do
-    pathLen = pathLen + (map_nodes[path[i]].pos - map_nodes[path[i-1]].pos):length()
+    -- path ids come from the live graph; map_nodes is the cached copy, which on a graph that rebuilds while driving
+    -- (BeamNG.Earth) can lack a node the path names -- indexing .pos on nil crashed here every frame. Bail instead;
+    -- the caller treats a nil length as "cannot tell".
+    local a, b = map_nodes[path[i]], map_nodes[path[i-1]]
+    if not (a and b) then return nil end
+    pathLen = pathLen + (a.pos - b.pos):length()
   end
 
   return pathLen
@@ -885,8 +890,12 @@ local function checkIfOtherCarOnSameRoad(my_veh_props, other_veh_props, wps_prop
 
   local other_wps_props_in_other_dir = getWaypointStartEnd(other_veh_props, other_veh_props, other_veh_props.center_pos)
 
+  -- Either car can sit over a node the (rebuilding) graph has no road for: no shared road can be decided this frame.
+  if not wps_props or not other_wps_props_in_other_dir then return false end
+
   local path = map.getPath(wps_props.start_wp, other_wps_props_in_other_dir.start_wp, 0, 100)
   local path_len = getPathLen(path)
+  if not path_len then return false end     -- (disconnected on the live graph: no path)
 
   --debugDrawer:drawTextAdvanced((other_veh_props.front_pos), String(path_len),  ColorF(1,1,1,1), true, false, ColorI(0,0,0,192))
 
