@@ -370,7 +370,12 @@ local function getPathLen(path, startIdx, stopIdx)
   stopIdx = stopIdx or #path
   local pathLen = 0
   for i = startIdx+1, stopIdx do
-    pathLen = pathLen + (map_nodes[path[i]].pos - map_nodes[path[i-1]].pos):length()
+    -- path ids come from the live graph; map_nodes is the cached copy, which on a graph that rebuilds while driving
+    -- (BeamNG.Earth) can lack a node the path names -- indexing .pos on nil crashed here every frame. Bail instead;
+    -- the caller treats a nil length as "cannot tell".
+    local a, b = map_nodes[path[i]], map_nodes[path[i-1]]
+    if not (a and b) then return nil end
+    pathLen = pathLen + (a.pos - b.pos):length()
   end
 
   return pathLen
@@ -468,11 +473,7 @@ local function getFuturePositionXYWithAcc(veh_props, time, acc_vec, rel_car_pos)
   return veh_pos_future
 end
 
-local function getWaypointPosition(wp)
-  if not wp then return nil end
-  if not graph_positions then
-    refreshGraphData()
-  end
+local function lookupWaypointPosition(wp)
   if graph_positions and graph_positions[wp] then
     return vec3(graph_positions[wp])
   end
@@ -480,6 +481,30 @@ local function getWaypointPosition(wp)
     return vec3(map_nodes[wp].pos)
   end
   return nil
+end
+
+-- Maps that build their road graph while driving (e.g. BeamNG.Earth) replace map.getMap() and the vehicle map data:
+-- the tables cached at mission start go stale, and findClosestRoad returns nodes they do not have. On a miss the
+-- caches are taken again (at most every GRAPH_REFRESH_S of CPU time) before giving up.
+local last_graph_refresh = -1
+local GRAPH_REFRESH_S = 0.2
+
+local function getWaypointPosition(wp)
+  if not wp then return nil end
+  if not graph_positions then
+    refreshGraphData()
+  end
+  local pos = lookupWaypointPosition(wp)
+  if pos then return pos end
+  local now = os.clock()
+  if now - last_graph_refresh > GRAPH_REFRESH_S then
+    last_graph_refresh = now
+    map_nodes = map.getMap().nodes
+    findClosestRoad = map.findClosestRoad
+    refreshGraphData()
+    pos = lookupWaypointPosition(wp)
+  end
+  return pos
 end
 
 local function flipLaneString(lanes)
@@ -741,6 +766,10 @@ local function getWaypointStartEnd(my_veh_props, veh_props, position)
   local wp1_pos = getWaypointPosition(wp1)
   local wp2_pos = getWaypointPosition(wp2)
 
+  if not wp1_pos or not wp2_pos then
+    return nil      -- (nodes the graph does not have (any more): no road segment this frame)
+  end
+
   --Relative to my car
   local origin = my_veh_props.dir * -9999
 
@@ -861,8 +890,12 @@ local function checkIfOtherCarOnSameRoad(my_veh_props, other_veh_props, wps_prop
 
   local other_wps_props_in_other_dir = getWaypointStartEnd(other_veh_props, other_veh_props, other_veh_props.center_pos)
 
+  -- Either car can sit over a node the (rebuilding) graph has no road for: no shared road can be decided this frame.
+  if not wps_props or not other_wps_props_in_other_dir then return false end
+
   local path = map.getPath(wps_props.start_wp, other_wps_props_in_other_dir.start_wp, 0, 100)
   local path_len = getPathLen(path)
+  if not path_len then return false end     -- (disconnected on the live graph: no path)
 
   --debugDrawer:drawTextAdvanced((other_veh_props.front_pos), String(path_len),  ColorF(1,1,1,1), true, false, ColorI(0,0,0,192))
 

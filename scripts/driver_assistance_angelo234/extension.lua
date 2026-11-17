@@ -1175,12 +1175,32 @@ local function processVELuaData()
   angular_speed_angelo234 = yawSmooth:get(angular_speed_angelo234)
 end
 
+
+-- Adaptive lidar rate: a scan's cost depends on the scene (on maps with dense static geometry, e.g. BeamNG.Earth, one
+-- 120-ray scan took ~8 ms, and two 20 Hz lidars cost a third of the frame time). Each lidar keeps the average cost of
+-- its scans and runs no more often than BUDGET of the time allows; never more often than 20 Hz as before. Hung off the
+-- existing sensor_state table (no new main-chunk local: LuaJIT caps that at 200, and this module is already at it).
+sensor_state.lidar = { BUDGET = 0.025, MAX_INTERVAL = 0.5, cost = {} }  -- BUDGET: share of real time a lidar may scan
+function sensor_state.lidarInterval(name)
+  local c = sensor_state.lidar.cost[name]
+  if not c then return 1.0 / 20.0 end
+  return math.min(sensor_state.lidar.MAX_INTERVAL, math.max(1.0 / 20.0, c / sensor_state.lidar.BUDGET))
+end
+function sensor_state.lidarScan(name, ...)
+  local t0 = os.clock()
+  local hits = virtual_lidar.scan(...)
+  local dt = os.clock() - t0
+  local c = sensor_state.lidar.cost[name]
+  sensor_state.lidar.cost[name] = c and (c * 0.8 + dt * 0.2) or dt
+  return hits
+end
+
 local function frontLidarLoop()
   while true do
     local dt, veh = coroutine.yield()
     if extra_utils.getPart("lidar_angelo234") and aeb_params and veh and veh.getPosition and veh.getDirectionVector and veh.getDirectionVectorUp then
       front_lidar_update_timer = front_lidar_update_timer + dt
-      if front_lidar_update_timer >= 1.0 / 20.0 then
+      if front_lidar_update_timer >= sensor_state.lidarInterval('front') then
         local pos = veh:getPosition()
         local forward = veh:getDirectionVector()
         local upVec = veh:getDirectionVectorUp()
@@ -1195,7 +1215,7 @@ local function frontLidarLoop()
           }
           local base_dist = aeb_params.sensor_max_distance
           local front_dist = base_dist + VIRTUAL_LIDAR_FRONT_EXTENSION
-          local hits = virtual_lidar.scan(
+          local hits = sensor_state.lidarScan('front',
             origin,
             dir,
             up,
@@ -1426,7 +1446,7 @@ local function updateVirtualLidar(dt, veh)
 
   if not aeb_params then return end
   if not veh or not veh.getPosition or not veh.getDirectionVector or not veh.getDirectionVectorUp then return end
-  if timers.virtual_lidar >= 1.0 / 20.0 then
+  if timers.virtual_lidar >= sensor_state.lidarInterval('ground') then
     local pos = veh:getPosition()
     local forward = veh:getDirectionVector()
     local upVec = veh:getDirectionVectorUp()
@@ -1448,7 +1468,7 @@ local function updateVirtualLidar(dt, veh)
       local scan_range = math.max(front_dist, rear_dist, side_dist)
       local ANG_FRONT = 95
       local ANG_REAR = 120
-      local scan_hits = virtual_lidar.scan(
+      local scan_hits = sensor_state.lidarScan('ground',
         origin,
         dir,
         up,
